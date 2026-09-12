@@ -1,0 +1,47 @@
+# 3 contenedores de ingesta (pull) que corren en la MV de ingesta (mv-ingesta).
+# Cada uno lee una base, genera archivos y los sube al bucket S3.
+#
+# Uso en mv-ingesta:
+#   export S3_BUCKET=transporte-datalake-<tuiniciales>
+#   docker compose up --build
+#
+# Las credenciales AWS las toma del entorno (AWS Academy) o del rol de la instancia.
+services:
+  ingesta01-ms1:
+    build: .
+    command: ["ingesta_ms1.py"]
+    environment:
+      S3_BUCKET: ${S3_BUCKET:?define S3_BUCKET}
+      S3_PREFIX: ingesta
+      AWS_REGION: us-east-1
+      BD_HOST: ${BD_HOST:-10.0.2.85}
+      BD_PASS: ${BD_PASS:-Transporte2026}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+
+  ingesta02-ms2:
+    build: .
+    command: ["ingesta_ms2.py"]
+    environment:
+      S3_BUCKET: ${S3_BUCKET:?define S3_BUCKET}
+      S3_PREFIX: ingesta
+      AWS_REGION: us-east-1
+      BD_HOST: ${BD_HOST:-10.0.2.85}
+      BD_PASS: ${BD_PASS:-Transporte2026}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+
+  ingesta03-ms3:
+    build: .
+    command: ["ingesta_ms3.py"]
+    environment:
+      S3_BUCKET: ${S3_BUCKET:?define S3_BUCKET}
+      S3_PREFIX: ingesta
+      AWS_REGION: us-east-1
+      BD_HOST: ${BD_HOST:-10.0.2.85}
+      BD_PASS: ${BD_PASS:-Transporte2026}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
