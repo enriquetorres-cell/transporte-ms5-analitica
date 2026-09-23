@@ -117,6 +117,35 @@ def rating_por_antiguedad():
     return {"items": consultar(sql)}
 
 
+# --- Endpoints sobre las 2 VISTAS de Athena (definidas en athena/consultas.sql) ---
+
+@app.get(f"{PREFIX}/vistas/rating-conductor")
+def vista_rating_conductor(limit: int = Query(default=10, ge=1, le=100)):
+    """Top conductores por rating, leído de la vista v_rating_conductor
+    (conductores JOIN calificaciones)."""
+    sql = f"""
+        SELECT conductor_id, nombre, apellido, calificaciones, rating_promedio
+        FROM v_rating_conductor
+        WHERE calificaciones >= 5
+        ORDER BY rating_promedio DESC, calificaciones DESC
+        LIMIT {limit}
+    """
+    return {"vista": "v_rating_conductor", "items": consultar(sql)}
+
+
+@app.get(f"{PREFIX}/vistas/ingreso-hora-distrito")
+def vista_ingreso_hora_distrito(limit: int = Query(default=10, ge=1, le=100)):
+    """Franjas (distrito, hora) con mayor ingreso promedio, leído de la vista
+    v_ingreso_hora_distrito (viajes finalizados)."""
+    sql = f"""
+        SELECT distrito, hora, viajes, ingreso_promedio
+        FROM v_ingreso_hora_distrito
+        ORDER BY ingreso_promedio DESC
+        LIMIT {limit}
+    """
+    return {"vista": "v_ingreso_hora_distrito", "items": consultar(sql)}
+
+
 @app.get(f"{PREFIX}/rutas/top-distritos")
 def top_distritos(minimo: int = Query(default=50, ge=0)):
     """Rutas origen→destino más frecuentes: viajes (MS2) JOIN calificaciones (MS3)."""

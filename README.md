@@ -101,6 +101,8 @@ Endpoints:
 - `GET /ms5/conductores/rating-por-distrito` — conductores JOIN calificaciones (la usa el frontend)
 - `GET /ms5/conductores/rating-por-antiguedad` — conductores JOIN viajes JOIN calificaciones
 - `GET /ms5/rutas/top-distritos?minimo=50` — viajes JOIN calificaciones
+- `GET /ms5/vistas/rating-conductor?limit=10` — lee la **vista** `v_rating_conductor`
+- `GET /ms5/vistas/ingreso-hora-distrito?limit=10` — lee la **vista** `v_ingreso_hora_distrito`
 
 ---
 
