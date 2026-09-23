@@ -22,7 +22,7 @@ def exportar(cur, tabla):
             w.writerow(fila)
             n += 1
     print(f"  {tabla}: {n:,} filas")
-    subir_a_s3(ruta, f"ms1/{tabla}.csv")
+    subir_a_s3(ruta, f"{tabla}/{tabla}.csv")
 
 
 def main():

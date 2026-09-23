@@ -1,24 +1,27 @@
 """MS5 · Microservicio analítico (Contrato Cero).
 Ejecuta consultas SQL en AWS Athena sobre el catálogo Glue del data lake (S3).
 Todas las rutas bajo el prefijo /ms5. Swagger en /ms5/docs.
+
+Credenciales: boto3 usa el rol de la MV (LabInstanceProfile) vía IMDS; no se
+pasan llaves por variables de entorno ni se monta ~/.aws.
 """
 import os
+import re
 import time
+
 import boto3
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 
 PREFIX = "/ms5"
-REGION = os.environ.get("AWS_REGION", "us-east-1")
-ATHENA_DB = os.environ.get("ATHENA_DB", "transporte")
-ATHENA_OUTPUT = os.environ["ATHENA_OUTPUT"]        # s3://.../athena-results/
-WORKGROUP = os.environ.get("ATHENA_WORKGROUP", "primary")
+athena = boto3.client("athena", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+DB = os.environ.get("GLUE_DATABASE", "transporte_urbano")
+SALIDA = os.environ["ATHENA_OUTPUT"]  # s3://.../athena-results/
 
-app = FastAPI(
-    title="MS5 - Analítico (Athena)",
-    version="1.0.0",
-    docs_url=f"{PREFIX}/docs",
-    openapi_url=f"{PREFIX}/openapi.json",
-)
+# Distritos: solo letras (con tildes) y espacios. Evita inyección SQL en el filtro.
+DISTRITO_RE = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{1,60}$")
+
+app = FastAPI(title="MS5 - Analitico (Athena)", version="1.0.0",
+              docs_url=f"{PREFIX}/docs", openapi_url=f"{PREFIX}/openapi.json")
 
 
 @app.get(f"{PREFIX}/health")
@@ -26,72 +29,106 @@ def health():
     return {"status": "ok", "servicio": "ms5"}
 
 
-def ejecutar_athena(sql: str):
-    """Corre una query en Athena y devuelve filas como lista de dicts."""
-    ath = boto3.client("athena", region_name=REGION)
-    qid = ath.start_query_execution(
+def numero(v):
+    if v is None:
+        return None
+    try:
+        return int(v) if "." not in v else round(float(v), 2)
+    except ValueError:
+        return v
+
+
+def consultar(sql: str, espera_max: int = 60):
+    eid = athena.start_query_execution(
         QueryString=sql,
-        QueryExecutionContext={"Database": ATHENA_DB},
-        ResultConfiguration={"OutputLocation": ATHENA_OUTPUT},
-        WorkGroup=WORKGROUP,
+        QueryExecutionContext={"Database": DB},
+        ResultConfiguration={"OutputLocation": SALIDA},
     )["QueryExecutionId"]
 
-    # Espera a que termine (con timeout).
-    for _ in range(60):
-        est = ath.get_query_execution(QueryExecutionId=qid)["QueryExecution"]["Status"]["State"]
-        if est in ("SUCCEEDED", "FAILED", "CANCELLED"):
+    for _ in range(espera_max):
+        estado = athena.get_query_execution(QueryExecutionId=eid)["QueryExecution"]["Status"]
+        if estado["State"] in ("SUCCEEDED", "FAILED", "CANCELLED"):
             break
         time.sleep(1)
-    if est != "SUCCEEDED":
-        raise HTTPException(status_code=500, detail=f"Athena: consulta {est}")
 
-    res = ath.get_query_results(QueryExecutionId=qid)
+    if estado["State"] != "SUCCEEDED":
+        raise HTTPException(500, {"error": "La consulta fallo",
+                                  "detalle": estado.get("StateChangeReason")})
+
+    res = athena.get_query_results(QueryExecutionId=eid)
     filas = res["ResultSet"]["Rows"]
-    if not filas:
-        return []
-    cols = [c["VarCharValue"] for c in filas[0]["Data"]]
-    salida = []
-    for fila in filas[1:]:
-        vals = [d.get("VarCharValue") for d in fila["Data"]]
-        salida.append(dict(zip(cols, vals)))
-    return salida
+    cabecera = [c.get("VarCharValue") for c in filas[0]["Data"]]
+    return [dict(zip(cabecera, [numero(c.get("VarCharValue")) for c in f["Data"]]))
+            for f in filas[1:]]
 
 
-@app.get(PREFIX + "/ingresos/por-hora-distrito")
-def ingresos_por_hora_distrito():
-    """Consulta estrella: ingreso promedio por hora del día y por distrito.
-    Une viajes (MS2). Devuelve {total, items:[{distrito, hora, viajes, ingreso_promedio, ingreso_total}]}.
-    """
-    sql = """
-        SELECT distrito_origen AS distrito,
-               hour(from_iso8601_timestamp(solicitado_en)) AS hora,
-               count(*)                 AS viajes,
-               round(avg(monto_total),2) AS ingreso_promedio,
-               round(sum(monto_total),2) AS ingreso_total
-        FROM viajes
-        WHERE estado = 'finalizado'
-        GROUP BY distrito_origen, hour(from_iso8601_timestamp(solicitado_en))
-        ORDER BY distrito, hora
-    """
-    items = ejecutar_athena(sql)
-    for it in items:
-        it["hora"] = int(it["hora"])
-        it["viajes"] = int(it["viajes"])
-        it["ingreso_promedio"] = float(it["ingreso_promedio"])
-        it["ingreso_total"] = float(it["ingreso_total"])
-    return {"total": len(items), "items": items}
-
-
-@app.get(PREFIX + "/rating-por-distrito")
+@app.get(f"{PREFIX}/conductores/rating-por-distrito")
 def rating_por_distrito():
-    """Une calificaciones (MS3) con viajes (MS2): rating promedio por distrito de origen."""
+    """Rating por distrito base: conductores (MS1) JOIN calificaciones (MS3)."""
     sql = """
-        SELECT v.distrito_origen AS distrito,
-               count(*)                AS calificaciones,
-               round(avg(c.rating),2)  AS rating_promedio
-        FROM calificaciones c
-        JOIN viajes v ON c.viaje_id = v.id
-        GROUP BY v.distrito_origen
+        SELECT c.distrito_base,
+               count(DISTINCT c.id)     AS conductores,
+               count(cal.viaje_id)      AS calificaciones,
+               round(avg(cal.rating),2) AS rating_promedio
+        FROM conductores c
+        LEFT JOIN calificaciones cal ON cal.conductor_id = c.id
+        GROUP BY c.distrito_base
         ORDER BY rating_promedio DESC
     """
-    return {"items": ejecutar_athena(sql)}
+    return {"items": consultar(sql)}
+
+
+@app.get(f"{PREFIX}/ingresos/por-hora-distrito")
+def ingresos_por_hora_distrito(distrito: str | None = None):
+    """Consulta estrella: ingreso promedio por hora del día y distrito (MS2)."""
+    filtro = ""
+    if distrito:
+        if not DISTRITO_RE.match(distrito):
+            raise HTTPException(400, {"error": "distrito inválido"})
+        filtro = f"AND v.distrito_origen = '{distrito}'"
+    sql = f"""
+        SELECT v.distrito_origen AS distrito,
+               hour(CAST(v.iniciado_en AS timestamp)) AS hora,
+               count(*)                    AS viajes,
+               round(avg(v.monto_total),2) AS ingreso_promedio,
+               round(sum(v.monto_total),2) AS ingreso_total
+        FROM viajes v
+        WHERE v.estado = 'finalizado' {filtro}
+        GROUP BY v.distrito_origen, hour(CAST(v.iniciado_en AS timestamp))
+        ORDER BY v.distrito_origen, hora
+    """
+    return {"items": consultar(sql)}
+
+
+@app.get(f"{PREFIX}/conductores/rating-por-antiguedad")
+def rating_por_antiguedad():
+    """conductores (MS1) JOIN viajes (MS2) JOIN calificaciones (MS3), por años de antigüedad."""
+    sql = """
+        SELECT date_diff('year', from_iso8601_date(c.fecha_ingreso), current_date) AS anios,
+               count(DISTINCT c.id)         AS conductores,
+               round(avg(cal.rating),2)     AS rating_promedio,
+               round(avg(v.monto_total),2)  AS ticket_promedio
+        FROM conductores c
+        JOIN viajes v           ON v.conductor_id = c.id
+        JOIN calificaciones cal ON cal.viaje_id   = v.id
+        WHERE v.estado = 'finalizado'
+        GROUP BY 1 ORDER BY 1
+    """
+    return {"items": consultar(sql)}
+
+
+@app.get(f"{PREFIX}/rutas/top-distritos")
+def top_distritos(minimo: int = Query(default=50, ge=0)):
+    """Rutas origen→destino más frecuentes: viajes (MS2) JOIN calificaciones (MS3)."""
+    sql = f"""
+        SELECT v.distrito_origen, v.distrito_destino,
+               count(*)                     AS viajes,
+               round(avg(v.distancia_km),2) AS km_promedio,
+               round(avg(cal.rating),2)     AS rating_promedio
+        FROM viajes v
+        LEFT JOIN calificaciones cal ON cal.viaje_id = v.id
+        WHERE v.estado = 'finalizado'
+        GROUP BY 1,2 HAVING count(*) > {minimo}
+        ORDER BY viajes DESC
+    """
+    return {"items": consultar(sql)}

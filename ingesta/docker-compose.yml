@@ -2,9 +2,11 @@
 # Cada uno lee una base, genera archivos y los sube al bucket S3.
 #
 # Uso en mv-ingesta:
-#   export S3_BUCKET=transporte-datalake-<tuiniciales>
+#   export S3_BUCKET=transporte-datalake-et
+#   export BD_PASS=...        # clave de las BD (no se sube al repo)
 #   docker compose up --build
 #
+# Suben a s3://$S3_BUCKET/catalogo/<tabla>/, que es lo que lee el crawler.
 # Las credenciales AWS las toma del entorno (AWS Academy) o del rol de la instancia.
 services:
   ingesta01-ms1:
@@ -12,10 +14,10 @@ services:
     command: ["ingesta_ms1.py"]
     environment:
       S3_BUCKET: ${S3_BUCKET:?define S3_BUCKET}
-      S3_PREFIX: ingesta
+      S3_PREFIX: catalogo
       AWS_REGION: us-east-1
       BD_HOST: ${BD_HOST:-10.0.2.85}
-      BD_PASS: ${BD_PASS:-Transporte2026}
+      BD_PASS: ${BD_PASS:?define BD_PASS}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
@@ -25,10 +27,10 @@ services:
     command: ["ingesta_ms2.py"]
     environment:
       S3_BUCKET: ${S3_BUCKET:?define S3_BUCKET}
-      S3_PREFIX: ingesta
+      S3_PREFIX: catalogo
       AWS_REGION: us-east-1
       BD_HOST: ${BD_HOST:-10.0.2.85}
-      BD_PASS: ${BD_PASS:-Transporte2026}
+      BD_PASS: ${BD_PASS:?define BD_PASS}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
@@ -38,10 +40,10 @@ services:
     command: ["ingesta_ms3.py"]
     environment:
       S3_BUCKET: ${S3_BUCKET:?define S3_BUCKET}
-      S3_PREFIX: ingesta
+      S3_PREFIX: catalogo
       AWS_REGION: us-east-1
       BD_HOST: ${BD_HOST:-10.0.2.85}
-      BD_PASS: ${BD_PASS:-Transporte2026}
+      BD_PASS: ${BD_PASS:?define BD_PASS}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}

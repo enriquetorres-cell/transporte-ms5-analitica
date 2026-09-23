@@ -28,7 +28,7 @@ def exportar(db, col):
             f.write(json.dumps(serializa(doc), ensure_ascii=False, default=str) + "\n")
             n += 1
     print(f"  {col}: {n:,} documentos")
-    subir_a_s3(ruta, f"ms3/{col}.json")
+    subir_a_s3(ruta, f"{col}/{col}.json")
 
 
 def main():

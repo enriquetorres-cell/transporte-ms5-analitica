@@ -6,12 +6,14 @@ import os
 import boto3
 
 S3_BUCKET = os.environ["S3_BUCKET"]            # obligatorio
-S3_PREFIX = os.environ.get("S3_PREFIX", "ingesta")
+# Una carpeta por tabla (catalogo/<tabla>/<archivo>) para que el Glue Crawler
+# "transporte-crawler" cree una tabla por archivo en la base transporte_urbano.
+S3_PREFIX = os.environ.get("S3_PREFIX", "catalogo")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 # La IP privada de mv-bd y la clave son las mismas de docker-compose.bd.yml.
 BD_HOST = os.environ.get("BD_HOST", "10.0.2.85")
-BD_PASS = os.environ.get("BD_PASS", "Transporte2026")
+BD_PASS = os.environ["BD_PASS"]              # obligatorio (nunca en el repo)
 
 
 def subir_a_s3(ruta_local, nombre_destino):
