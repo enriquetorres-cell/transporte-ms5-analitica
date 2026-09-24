@@ -9,6 +9,9 @@ ms5/       · microservicio analítico (FastAPI) que consulta Athena  (prefijo /
 athena/    · 4 consultas con JOIN + 2 vistas (verificadas en Athena)
 ```
 
+> **Despliegue completo del proyecto en AWS (paso a paso):** ver la
+> [guía principal](https://github.com/Limepal/MS1-Usuarios-y-Conductores#readme): paso 4 (MS5) y paso 8 (data lake).
+
 ## Arquitectura
 
 ```
@@ -34,12 +37,12 @@ aws s3 mb s3://$S3_BUCKET --region us-east-1
 ### 2. En la MV de ingesta (`mv-ingesta`), clonar y configurar
 
 ```bash
-git clone https://github.com/<tu-usuario>/transporte-ms5-analitica.git
+git clone https://github.com/enriquetorres-cell/transporte-ms5-analitica.git
 cd transporte-ms5-analitica/ingesta
 export S3_BUCKET=transporte-datalake-et
 export BD_PASS=...   # clave de las bases (pídela al equipo; no va en el repo)
-# credenciales AWS del Learner Lab (para poder subir a S3):
-export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=...
+# Credenciales de S3: las da el rol LabInstanceProfile de la MV (no hace falta pegar llaves).
+# Solo si la MV no tiene rol: export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=...
 ```
 
 > `mv-ingesta` está en `sg-prod`, así que **alcanza a `mv-bd`** (10.0.2.85) en los
@@ -66,6 +69,13 @@ Debe listar `usuarios/usuarios.csv`, `viajes/viajes.csv`, `calificaciones/califi
 ## Para el HITO 2 (completo)
 
 ### 4. Catálogo Glue
+
+```bash
+aws glue create-database --database-input Name=transporte_urbano
+aws glue create-crawler --name transporte-crawler --role LabRole --database-name transporte_urbano \
+  --targets '{"S3Targets":[{"Path":"s3://<BUCKET>/catalogo/"}]}'
+aws glue start-crawler --name transporte-crawler
+```
 
 - Crawler **`transporte-crawler`** sobre `s3://transporte-datalake-et/catalogo/<tabla>/`
   → base Glue **`transporte_urbano`**, una tabla por archivo (8 tablas: usuarios, conductores,
